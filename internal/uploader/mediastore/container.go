@@ -5,36 +5,35 @@
 package mediastore
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/mediastore"
-	"github.com/aws/aws-sdk-go/service/mediastoredata"
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/mediastore"
+	"github.com/aws/aws-sdk-go-v2/service/mediastoredata"
 )
 
-func (u *msUploader) getDataClientForContainer(name string) (*mediastoredata.MediaStoreData, error) {
+func (u *msUploader) getDataClientForContainer(ctx context.Context, name string) (*mediastoredata.Client, error) {
 	v, ok := u.containers.Load(name)
 	if !ok {
-		client, err := u.newDataClient(name)
+		client, err := u.newDataClient(ctx, name)
 		if err != nil {
 			return nil, err
 		}
 		v = client
 		u.containers.Store(name, v)
 	}
-	return v.(*mediastoredata.MediaStoreData), nil
+	return v.(*mediastoredata.Client), nil
 }
 
-func (u *msUploader) newDataClient(containerName string) (*mediastoredata.MediaStoreData, error) {
-	resp, err := u.client.DescribeContainer(&mediastore.DescribeContainerInput{
+func (u *msUploader) newDataClient(ctx context.Context, containerName string) (*mediastoredata.Client, error) {
+	resp, err := u.client.DescribeContainer(ctx, &mediastore.DescribeContainerInput{
 		ContainerName: aws.String(containerName),
 	})
 	if err != nil {
 		return nil, err
 	}
-	sess, err := session.NewSession(aws.NewConfig().WithEndpoint(*resp.Container.Endpoint))
-	if err != nil {
-		return nil, err
-	}
-	client := mediastoredata.New(sess)
+	client := mediastoredata.NewFromConfig(u.config, func(options *mediastoredata.Options) {
+		options.BaseEndpoint = resp.Container.Endpoint
+	})
 	return client, nil
 }

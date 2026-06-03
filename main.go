@@ -89,7 +89,7 @@ func main() {
 
 	uper, err := cfg.uploader()
 	if err != nil {
-		logger.Error("failed to create uploader", err)
+		logger.Error("failed to create uploader", "error", err)
 		os.Exit(1)
 	}
 
@@ -121,7 +121,7 @@ func main() {
 		case http.MethodPost, http.MethodPut:
 			err = uper.Upload(options)
 			if err != nil {
-				logger.Error("failed to upload file", err)
+				logger.Error("failed to upload file", "error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -129,7 +129,7 @@ func main() {
 		case http.MethodDelete:
 			err = uper.Delete(options)
 			if err != nil {
-				logger.Error("failed to delete file", err)
+				logger.Error("failed to delete file", "error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -141,7 +141,7 @@ func main() {
 	listenAddr := fmt.Sprintf(":%d", cfg.HTTPPort)
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
-		logger.Error("failed to start listener", err)
+		logger.Error("failed to start listener", "error", err)
 		os.Exit(1)
 	}
 	defer listener.Close()

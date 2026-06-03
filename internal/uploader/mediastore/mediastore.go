@@ -5,12 +5,14 @@
 package mediastore
 
 import (
+	"context"
 	"sync"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/mediastore"
-	"github.com/aws/aws-sdk-go/service/mediastoredata"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/mediastore"
+	"github.com/aws/aws-sdk-go-v2/service/mediastoredata"
+	"github.com/aws/aws-sdk-go-v2/service/mediastoredata/types"
 	"github.com/fsouza/s3-upload-proxy/internal/uploader"
 )
 
@@ -22,26 +24,28 @@ type DriverOptions struct {
 
 // New returns an uploader that sends objects to Elemental MediaStore.
 func New(options DriverOptions) (uploader.Uploader, error) {
-	u := msUploader{uploadAvailability: mediastoredata.UploadAvailabilityStandard}
+	u := msUploader{uploadAvailability: types.UploadAvailabilityStandard}
 	if options.ChunkedTransfer {
-		u.uploadAvailability = mediastoredata.UploadAvailabilityStreaming
+		u.uploadAvailability = types.UploadAvailabilityStreaming
 	}
-	sess, err := session.NewSession()
+	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	u.client = mediastore.New(sess)
+	u.client = mediastore.NewFromConfig(cfg)
+	u.config = cfg
 	return &u, nil
 }
 
 type msUploader struct {
-	client             *mediastore.MediaStore
+	client             *mediastore.Client
+	config             aws.Config
 	containers         sync.Map
-	uploadAvailability string
+	uploadAvailability types.UploadAvailability
 }
 
 func (u *msUploader) Upload(options uploader.Options) error {
-	client, err := u.getDataClientForContainer(options.Bucket)
+	client, err := u.getDataClientForContainer(options.Context, options.Bucket)
 	if err != nil {
 		return err
 	}
@@ -49,19 +53,19 @@ func (u *msUploader) Upload(options uploader.Options) error {
 		Path:               aws.String(options.Path),
 		ContentType:        options.ContentType,
 		CacheControl:       options.CacheControl,
-		Body:               aws.ReadSeekCloser(options.Body),
-		UploadAvailability: aws.String(u.uploadAvailability),
+		Body:               options.Body,
+		UploadAvailability: u.uploadAvailability,
 	}
-	_, err = client.PutObjectWithContext(options.Context, &input)
+	_, err = client.PutObject(options.Context, &input)
 	return err
 }
 
 func (u *msUploader) Delete(options uploader.Options) error {
-	client, err := u.getDataClientForContainer(options.Bucket)
+	client, err := u.getDataClientForContainer(options.Context, options.Bucket)
 	if err != nil {
 		return err
 	}
 	input := mediastoredata.DeleteObjectInput{Path: aws.String(options.Path)}
-	_, err = client.DeleteObjectWithContext(options.Context, &input)
+	_, err = client.DeleteObject(options.Context, &input)
 	return err
 }
